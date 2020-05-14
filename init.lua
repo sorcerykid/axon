@@ -56,60 +56,6 @@ end
 
 --------------------
 
-axon.register_source = function ( node_name, stimulus_list )
-	if not sources[ node_name ] then
-		sources[ node_name ] = { }
-	end
-	for i, v in pairs( stimulus_list ) do
-		local stimulus
-		if v.class == "contact" then
-			stimulus = ContactStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.power )
-		elseif v.class == "radiation" then
-			stimulus = RadiationStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.radius, v.scale, v.power, v.max_count )
-		elseif v.class == "immersion" then
-			stimulus = ImmersionStimulus( node_name, v.group, v.intensity, v.chance, v.period )
-		end
-		table.insert( sources[ node_name ], stimulus )
-	end
-end
-
-axon.register_source_group = function ( node_group, node_names )
-	for i, v in ipairs( node_names ) do
-		local groups = minetest.regi	stered_nodes[ v ].groups
-
-		groups[ node_group ] = 1
-		minetest.override_item( v, { groups = groups } )
-	end
-end
-
-axon.generate_direct_stimulus = function ( obj, groups )
-	punch_object( obj, groups )
-end
-
-axon.generate_radial_stimulus = function ( pos, radius, speed, slope, chance, groups, classes )
-	for obj in mobs.iterate_registry( pos, radius, radius, classes ) do
-		local length = vector.distance( pos, obj:get_pos( ) )
-
-		if length <= radius and random( chance ) == 1 then
-			local damage_groups = { }
-
-			for k, v in pairs( groups ) do
-				damage_groups[ k ] = ceil( v * get_signal_strength( radius, radius - length, slope ) )
-			end
-
-			if speed > 0 then
-				minetest.after( length / speed, function ( )
-					punch_object( obj, damage_groups, pos )
-				end )
-			else
-				punch_object( obj, damage_groups, pos )
-			end
-		end
-	end
-end
-
---------------------
-
 local function ContactStimulus( node_name, group, intensity, chance, period, power )
 	local self = { }
 
@@ -134,7 +80,7 @@ local function ContactStimulus( node_name, group, intensity, chance, period, pow
 	end
 
 	return self
-vend
+end
 
 local function RadiationStimulus( node_name, group, intensity, chance, period, radius, scale, power, max_count )
 	local self = { }
@@ -245,7 +191,9 @@ function AxonObject( self, armor_groups )
 	end
 
 	self.on_step = function ( self, dtime, pos, ... )
+S1()
 		propagator.on_step( dtime, pos )
+S1_()
 		old_on_step( self, dtime, pos, ... )
 	end
 
@@ -297,6 +245,60 @@ print( "-> old_on_punch(self)" )
 
 		-- if stimulus wasn't handled by a receptron, fallback to on_punch method
 		return old_on_punch( self, puncher, time_from_last_punch, tool_capabilities, direction, damage )
+	end
+end
+
+--------------------
+
+axon.register_source = function ( node_name, stimulus_list )
+	if not sources[ node_name ] then
+		sources[ node_name ] = { }
+	end
+	for i, v in pairs( stimulus_list ) do
+		local stimulus
+		if v.class == "contact" then
+			stimulus = ContactStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.power )
+		elseif v.class == "radiation" then
+			stimulus = RadiationStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.radius, v.scale, v.power, v.max_count )
+		elseif v.class == "immersion" then
+			stimulus = ImmersionStimulus( node_name, v.group, v.intensity, v.chance, v.period )
+		end
+		table.insert( sources[ node_name ], stimulus )
+	end
+end
+
+axon.register_source_group = function ( node_group, node_names )
+	for i, v in ipairs( node_names ) do
+		local groups = minetest.registered_nodes[ v ].groups
+
+		groups[ node_group ] = 1
+		minetest.override_item( v, { groups = groups } )
+	end
+end
+
+axon.generate_direct_stimulus = function ( obj, groups )
+	punch_object( obj, groups )
+end
+
+axon.generate_radial_stimulus = function ( pos, radius, speed, slope, chance, groups, classes )
+	for obj in mobs.iterate_registry( pos, radius, radius, classes ) do
+		local length = vector.distance( pos, obj:get_pos( ) )
+
+		if length <= radius and random( chance ) == 1 then
+			local damage_groups = { }
+
+			for k, v in pairs( groups ) do
+				damage_groups[ k ] = ceil( v * get_signal_strength( radius, radius - length, slope ) )
+			end
+
+			if speed > 0 then
+				minetest.after( length / speed, function ( )
+					punch_object( obj, damage_groups, pos )
+				end )
+			else
+				punch_object( obj, damage_groups, pos )
+			end
+		end
 	end
 end
 
