@@ -19,6 +19,7 @@ local stack_size = 0
 local random = math.random
 local pow = math.pow
 local ceil = math.ceil
+local min = math.min
 
 local function check_limits( v, min_v, max_v )
 	return v >= min_v and v <= max_v
@@ -28,18 +29,8 @@ local function clamp( val, min, max )
 	return val < min and min or val > max and max or val
 end
 
-local function get_power_decrease( scale, power, ratio )
-	return ratio <= 1 - scale and 1.0 or
-		max( 1 - pow( ( scale + ratio - 1 ) / scale, 1 + power ), 0 )
-end
-
-local function get_power_increase( scale, power, ratio )
-	return ratio >= scale and 1.0 or
-		1 - pow( ( scale - ratio ) / scale, 1 + power )
-end
-
 local function get_signal_strength( max_value, cur_value, slope )
-	return math.pow( cur_value / max_value, 1 - clamp( slope, 0, 1 ) )
+	return pow( cur_value / max_value, 1 - clamp( slope, 0, 1 ) )
 end
 
 local function punch_object( obj, groups, pos )
@@ -60,7 +51,7 @@ local function ContactStimulus( node_name, group, intensity, chance, period, pow
 	local self = { }
 
 	self.group = group
-	self.class = "contact"
+	self.propagator = "contact"
 	self.period = period
 
 	self.on_action = function ( source_pos, target_obj )
@@ -82,37 +73,11 @@ local function ContactStimulus( node_name, group, intensity, chance, period, pow
 	return self
 end
 
-local function RadiationStimulus( node_name, group, intensity, chance, period, radius, scale, power, max_count )
-	local self = { }
-
-	self.group = group
-	self.class = "radiation"
-	self.period = period
-
-	self.on_action = function ( source_pos, target_obj )
-		if random( chance ) == 1 then
-			local touch_counts = minetest.count_nodes_in_area(
-				vector.add( source_pos, -radius ), vector.add( source_pos, radius ), { node_name }, true )
-			local count = touch_counts[ node_name ]
-
-			if count > 0 then
-				local damage = intensity * get_power_increase( scale, power, count / max_count )
-				target_obj:punch( target_obj, period, {
-					full_punch_interval = period,
-					damage_groups = { [group] = damage },
-	     			}, nil )
-			end
-		end
-	end
-
-	return self
-end
-
 local function ImmersionStimulus( node_name, group, intensity, chance, period )
 	local self = { }
 
 	self.group = group
-	self.class = "immersion"
+	self.method = "immersion"
 	self.period = period
 
 	self.on_action = function ( source_pos, target_obj )
@@ -124,6 +89,59 @@ local function ImmersionStimulus( node_name, group, intensity, chance, period )
 				target_obj:punch( target_obj, period, {
 					full_punch_interval = period,
 					damage_groups = { [group] = intensity },
+	     			}, nil )
+			end
+		end
+	end
+
+	return self
+end
+
+local function RadiationStimulus( node_name, group, intensity, chance, period, radius, power )
+	local self = { }
+
+	self.group = group
+	self.propagator = "radiation"
+	self.period = period
+
+	self.on_action = function ( source_pos, target_obj )
+		if random( chance ) == 1 then
+			local touch_counts = minetest.count_nodes_in_area(
+				vector.add( source_pos, -radius ), vector.add( source_pos, radius ), { node_name }, true )
+			local count = touch_counts[ node_name ]
+
+			if count > 0 then
+				local damage = intensity * pow( count, power )
+				target_obj:punch( target_obj, period, {
+					full_punch_interval = period,
+					damage_groups = { [group] = damage },
+	     			}, nil )
+			end
+		end
+	end
+
+	return self
+end
+
+local function EmissionStimulus( node_name, group, intensity, chance, period, radius, slope )
+	local self = { }
+
+	self.group = group
+	self.propagator = "radiation"
+	self.period = period
+
+	self.on_action = function ( source_pos, target_obj )
+		if random( chance ) == 1 then
+			-- get nearest node position in a radius, including the center
+			local node_pos = minetest.find_node_near( source_pos, radius, { node_name }, true )
+
+			if node_pos then
+				local length = min( radius, vector.distance( node_pos, source_pos ) )
+				local damage = ceil( intensity * get_signal_strength( radius, radius - length, slope ) )
+
+				target_obj:punch( target_obj, period, {
+					full_punch_interval = period,
+					damage_groups = { [group] = damage },
 	     			}, nil )
 			end
 		end
@@ -252,12 +270,16 @@ axon.register_source = function ( node_name, stimulus_list )
 	end
 	for i, v in pairs( stimulus_list ) do
 		local stimulus
-		if v.class == "contact" then
+		if v.propagator == "contact" then
 			stimulus = ContactStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.power )
-		elseif v.class == "radiation" then
-			stimulus = RadiationStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.radius, v.scale, v.power, v.max_count )
-		elseif v.class == "immersion" then
+		elseif v.propagator == "immersion" then
 			stimulus = ImmersionStimulus( node_name, v.group, v.intensity, v.chance, v.period )
+		elseif v.propagator == "radiation" then
+			stimulus = RadiationStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.radius, v.power )
+		elseif v.propagator == "emission" then
+			stimulus = EmissionStimulus( node_name, v.group, v.intensity, v.chance, v.period, v.radius, v.slope )
+		else
+			error( "axon.register_source(): Unknown propagator specified in stimulus property table" )
 		end
 		table.insert( sources[ node_name ], stimulus )
 	end
@@ -276,11 +298,11 @@ axon.generate_direct_stimulus = function ( obj, groups )
 	punch_object( obj, groups )
 end
 
-axon.generate_radial_stimulus = function ( pos, radius, speed, slope, chance, groups, classes )
+axon.generate_radial_stimulus = function ( pos, radius, speed, slope, groups, classes )
 	for obj in mobs.iterate_registry( pos, radius, radius, classes ) do
 		local length = vector.distance( pos, obj:get_pos( ) )
 
-		if length <= radius and random( chance ) == 1 then
+		if length <= radius then
 			local damage_groups = { }
 
 			for k, v in pairs( groups ) do
@@ -301,3 +323,10 @@ end
 --------------------
 
 dofile( minetest.get_modpath( "axon" ) .. "/sources.lua" )
+
+-- compatibility for Minetest S3 engine
+
+if not minetest.count_nodes_in_area then
+        dofile( minetest.get_modpath( "axon" ) .. "/compatibility.lua" )
+end
+

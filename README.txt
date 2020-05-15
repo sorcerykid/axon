@@ -10,6 +10,17 @@ For complete usage instructions, please refer to the forum topic:
 https://forum.minetest.net/viewtopic.php?f=9&t=24721
 
 
+Compatability
+----------------------
+
+Requires PR #9717 for Minetest 5.3-dev
+
+Dependencies
+----------------------
+
+Mobs Lite Mod (required)
+  https://bitbucket.org/sorcerykid/mobs
+  
 Repository
 ----------------------
 
