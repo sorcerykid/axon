@@ -191,9 +191,9 @@ function AxonObject( self, armor_groups )
 	end
 
 	self.on_step = function ( self, dtime, pos, ... )
-S1()
+		--S1()
 		propagator.on_step( dtime, pos )
-S1_()
+		--S1_()
 		old_on_step( self, dtime, pos, ... )
 	end
 
@@ -228,20 +228,16 @@ S1_()
 	end
 
 	self.on_punch = function ( self, puncher, time_from_last_punch, tool_capabilities, direction, damage )
-print( "self:onpunch():", self.object, self.name )
 		if puncher == self.object then
 			-- filter and relay the incoming stimulus
 			for k, v in pairs( tool_capabilities.damage_groups ) do
 				local receptron = self.receptrons[ k ]
 				if receptron and check_limits( v, receptron.min_intensity or 1, receptron.max_intensity or 65536 ) then
-print( "-> on_reaction(self)" )
 					-- if receptron returns false, then stimulus was handled
-print( "DIR", minetest.pos_to_string( direction ) )
 					if not receptron.on_reaction( self, v, direction ) then return true end
 				end
 			end
 		end
-print( "-> old_on_punch(self)" )
 
 		-- if stimulus wasn't handled by a receptron, fallback to on_punch method
 		return old_on_punch( self, puncher, time_from_last_punch, tool_capabilities, direction, damage )
