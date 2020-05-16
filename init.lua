@@ -194,7 +194,7 @@ function AxonObject( self, armor_groups )
 		armor_groups = { }
 	end
 	for k, v in pairs( self.receptrons ) do
-		armor_groups[ k ] = v.sensitivity or 100
+		armor_groups[ k ] = v.sensitivity or 0
 	end
 	self.object:set_armor_groups( armor_groups )
 
@@ -221,13 +221,13 @@ function AxonObject( self, armor_groups )
 		end
 	end
 
-	self.generate_radial_stimulus = function ( self, radius, speed, slope, chance, groups, classes )
+	self.generate_radial_stimulus = function ( self, radius, speed, slope, groups, classes )
 		local pos = self.object:get_pos( )
 
 		for obj in mobs.iterate_registry( pos, radius, radius, classes ) do
 			local length = vector.distance( pos, obj:get_pos( ) )
 
-			if obj ~= self.object and length <= radius and random( chance ) == 1 then
+			if obj ~= self.object and length <= radius then
 				local damage_groups = { }
 
 				for k, v in pairs( groups ) do
